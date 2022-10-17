@@ -1,7 +1,7 @@
 -- Based on the paper https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.61.3862&rep=rep1&type=pdf
 -- and https://github.com/artem-ogre/CDT
 
-offset = 100
+local SAFE = false
 
 outer = {
 	v = {
@@ -34,88 +34,138 @@ inner = {
 }
 
 function dline(p1, p2)
-	love.graphics.line(p1[1], p1[2], p2[1], p2[2])
+	love.graphics.line(p1[1]*zoom, p1[2]*zoom, p2[1]*zoom, p2[2]*zoom)
 end
 
 function drawEdges(verts, edges)
-	for i, edge in pairs(edges) do
+	for _, edge in pairs(edges) do
 		start = verts[edge[1]]
 		dest = verts[edge[2]]
 		dline(start, dest)
 	end
 end
 
-function drawTris(verts, tris, labels)
+function drawTris(verts, tris, labels, edge_labels)
 	for i, tri in pairs(tris) do
 		v1 = verts[tri[1]]
 		v2 = verts[tri[2]]
 		v3 = verts[tri[3]]
-		dline(v1, v2)
-		dline(v2, v3)
-		dline(v3, v1)
+		pv = {}
+		for i, v in ipairs(tri) do
+			pv[#pv+1] = verts[v][1] * zoom
+			pv[#pv+1] = verts[v][2] * zoom
+		end
+		love.graphics.polygon("fill", pv)
 
-		love.graphics.print(labels[i], (v1[1]+v2[1]+v3[1])/3, (v1[2]+v2[2]+v3[2])/3)
+		-- dline(verts[tri[1]], verts[tri[2]])
+		-- dline(verts[tri[2]], verts[tri[3]])
+		-- dline(verts[tri[3]], verts[tri[1]])
+		-- love.graphics.print(labels[i], (v1[1]+v2[1]+v3[1])/3*zoom, (v1[2]+v2[2]+v3[2])/3*zoom)
 
 		if incircle(v1, v2, v3, {mx, my}) then
+
+		-- love.graphics.print(edge_labels[i][1], (v2[1]+v3[1])/2*zoom, (v2[2]+v3[2])/2*zoom)
+		-- love.graphics.print(edge_labels[i][2], (v1[1]+v3[1])/2*zoom, (v1[2]+v3[2])/2*zoom)
+		-- love.graphics.print(edge_labels[i][3], (v2[1]+v1[1])/2*zoom, (v2[2]+v1[2])/2*zoom)
 			cx, cy = circumcenter(v1, v2, v3)
 			cr = circumr(v1, v2, v3)
-			-- love.graphics.points(offset + cx, offset + cy)
-			love.graphics.circle("line", cx, cy, cr, 100)
+			-- love.graphics.points(cx, cy)
+			love.graphics.circle("line", cx*zoom, cy*zoom, cr*zoom, 100)
 		end
 	end
 end
 
-visited = {}
+local function pairsByKeys (t, f)
+	local a = {}
+	for n in pairs(t) do table.insert(a, n) end
+	table.sort(a, f)
+	local i = 0      -- iterator variable
+	local iter = function ()   -- iterator function
+		i = i + 1
+		if a[i] == nil then return nil
+		else return a[i], t[a[i]]
+		end
+	end
+	return iter
+end
+
+function adj_tostr(adj)
+	if adj == nil then
+		return "<NIL>"
+	end
+
+	return tostring(adj[1])
+end
 
 function drawpol(pol)
-	love.graphics.setLineWidth(1)
+	love.graphics.setLineWidth(.1)
 	local verts = pol["v"]
 
 	if pol.t ~= nil then
 
 		local tris = pol.t
-		labels = {}
-		for i, _ in ipairs(tris) do
+		local labels = {}
+		for i, _ in pairs(tris) do
 			labels[i] = tostring(i)
 		end
 
-		-- v_tris = {}
-		-- v_labels = {}
-		-- local offset = 0
-		-- for i, v in pairs(visited) do
-		-- 	table.insert(v_tris, table.remove(tris, i-offset))
-		-- 	local label = table.remove(labels, i-offset)
-		-- 	if v then
-		-- 		label = label .. "O"
-		-- 	end
-		-- 	table.insert(v_labels, label)
-		-- 	offset = offset + 1
-		-- end
+		if true then
+			local edge_labels = {}
+			-- for i, v in pairs(pol.adj) do
+			-- 	edge_labels[i] = {adj_tostr(v[1]), adj_tostr(v[2]), adj_tostr(v[3])}
+			-- end
 
-		drawTris(verts, tris, labels)
+			drawTris(verts, tris, labels, edge_labels)
+		else
+			local v_tris = {}
+			local i_tris = {}
+			local nv_tris = {}
+			local v_labels = {}
+			local i_labels = {}
+			local nv_labels = {}
+			local offset = 0
+			for i, v in pairs(tris) do
+				if insides[i] == nil then
+					table.insert(nv_tris, v)
+					table.insert(nv_labels, labels[i])
+				elseif insides[i] then
+					table.insert(i_tris, v)
+					table.insert(i_labels, labels[i])
+				else
+					table.insert(v_tris, v)
+					table.insert(v_labels, labels[i])
+				end
+			end
 
-		-- love.graphics.setColor(0, 0, 255)
-		-- drawTris(verts, v_tris, v_labels)
-		-- love.graphics.setColor(255, 255, 255)
+			drawTris(verts, nv_tris, nv_labels, {})
+			love.graphics.setColor(0, 0, 255)
+			drawTris(verts, v_tris, v_labels, {})
+			love.graphics.setColor(255, 0, 255)
+			drawTris(verts, i_tris, i_labels, {})
+			love.graphics.setColor(255, 255, 255)
+		end
 	end
 
 	if pol.e ~= nil then
 		if pol.t ~= nil then
 			love.graphics.setColor(0, 255, 0)
-			love.graphics.setLineWidth(3)
+			love.graphics.setLineWidth(.1)
 		end
 
 		drawEdges(verts, pol.e)
 
-		love.graphics.setLineWidth(1)
+		love.graphics.setLineWidth(.1)
 		love.graphics.setColor(255, 255, 255)
 	end
 
 	for i, vert in pairs(verts) do
-		if i == 4 then
+		-- if i == 4 then
 			love.graphics.setColor(255, 0, 0)
+		-- end
+		if i == 5 then
+		-- love.graphics.print(tostring(i), vert[1]*zoom-10, vert[2]*zoom-10)
 		end
-		love.graphics.points(vert[1], vert[2])
+		-- love.graphics.print(tostring(i), vert[1]*zoom+10, vert[2]*zoom+10)
 		love.graphics.setColor(255, 255, 255)
 	end
 end
@@ -175,6 +225,14 @@ function superTri(bbox)
 		},
 		e={
 		},
+		adj={
+			{{nil, nil}, {nil, nil}, {nil, nil}},
+		},
+		inv_t = {
+			{1, 1},
+			{1, 2},
+			{1, 3},
+		}
 	}
 end
 
@@ -182,58 +240,1090 @@ function det(p1, p2)
 	return (p1[1] * p2[2]) - (p1[2] * p2[1])
 end
 
-function love.load()
-	love.graphics.setPointSize(10)
-end
-function point_inside_tri(p, face, tri)
-	verts = face["v"]
-	v0 = verts[tri[1]]
-	v1 = {verts[tri[2]][1] - v0[1], verts[tri[2]][2] - v0[2]}
-	v2 = {verts[tri[3]][1] - v0[1], verts[tri[3]][2] - v0[2]}
-
-	div = det(v1, v2)
-
-	a = (det(p, v2) - det(v0, v2)) / div
-	b = -(det(p, v1) - det(v0, v1)) / div
-	inside = a > 0 and b > 0 and a + b < 1
-	return inside
+function readInt4(str, cursor)
+	local value = 0
+	value = bit.bor(bit.rshift(string.byte(str, cursor  ), 24), value)
+	value = bit.bor(bit.rshift(string.byte(str, cursor+1), 16), value)
+	value = bit.bor(bit.rshift(string.byte(str, cursor+2),  8), value)
+	value = bit.bor(           string.byte(str, cursor+3)     , value)
+	return value, cursor+4
 end
 
-function find_containing_tri(face, p)
-	for i, tri in pairs(sutri.t) do
-		if point_inside_tri(p, sutri, tri) then
-			return i
+local function int2bin(n)
+	local result = ""
+	while n ~= 0 do
+		if bit.band(n, 0x1) == 0 then
+			result = "0" .. result
+		else
+			result = "1" .. result
+		end
+		n = bit.rshift(n, 1)
+	end
+	return result
+end
+
+local ffi = require("ffi")
+function readVarInt(str, cursor)
+	local value = ffi.new("uint64_t", 0)
+	local i = 0
+	while true do
+		local byte = ffi.new("uint64_t", string.byte(str, cursor))
+
+		value = bit.bor(bit.lshift(bit.band(byte, 0x7F), i*7), value)
+
+		cursor = cursor + 1
+		-- print(int2bin(value))
+		if bit.band(byte, 0x80) == 0 then
+			break;
+		end
+		i = i + 1
+	end
+
+	return value, cursor
+end
+
+function readVarZig(str, cursor)
+	local value, cursor = readVarInt(str, cursor)
+	value = ffi.cast("int64_t", bit.bxor(bit.rshift(value, 1), bit.arshift(bit.lshift(value, 63), 63)))
+
+	return value, cursor
+end
+
+function readKey(str, cursor)
+	local value, cursor = readVarInt(str, cursor)
+
+	local key = bit.rshift(value, 3)
+	local t = bit.band(value, 0x3)
+
+	return key, t, cursor
+end
+
+function readString(str, cursor)
+	local len, cursor = readVarInt(str, cursor)
+	len = tonumber(len)
+	cursor = tonumber(cursor)
+
+	return str:sub(cursor, cursor+len-1), cursor + len
+end
+
+function skip(str, cursor, t)
+	if t == 0 then
+		local _, cursor = readVarInt(str, cursor)
+		return cursor
+	elseif t == 1 then
+		return cursor + 8
+	elseif t == 2 then
+		local len, cursor = readVarInt(str, cursor)
+		return cursor + tonumber(len)
+	elseif t == 3 or t == 4 then
+		abort("")
+	elseif t == 5 then
+		return cursor + 4
+	end
+end
+
+function buildindex(pbf)
+	local index = {}
+
+	file_end = #pbf + 1
+	local cursor = 1
+	while cursor < file_end do
+		local header_len
+		header_len, cursor = readInt4(pbf, cursor)
+		local header_end = cursor + header_len
+
+		local datatype
+		local datasize
+		while cursor < header_end do
+			local key, t
+			key, t, cursor = readKey(pbf, cursor)
+			if key == 1 then
+				datatype, cursor = readString(pbf, cursor)
+			elseif key == 3 then
+				datasize, cursor = readVarInt(pbf, cursor)
+			else
+				cursor = skip(pbf, cursor, t)
+			end
+		end
+		if cursor > header_end then
+			abort(1)
+		end
+
+		table.insert(index, {datatype, cursor, datasize})
+		cursor = cursor + tonumber(datasize)
+	end
+
+	return index
+end
+
+function extractblob(pbf, cursor, datalen)
+	local rawdata
+
+	local data_end = cursor + datalen
+	while cursor < data_end do
+		local key, t
+		key, t, cursor = readKey(pbf, cursor)
+		if key == 1 then
+			-- raw
+			rawdata, cursor = readString(pbf, cursor)
+		elseif key == 3 then
+			-- zlib_data
+			local compresseddata
+			compresseddata, cursor = readString(pbf, cursor)
+			rawdata = love.data.decompress("string", "zlib", compresseddata)
+		else
+			cursor = skip(pbf, cursor, t)
 		end
 	end
-	return nil
+	if cursor > data_end then
+		abort(1)
+	end
+
+	return rawdata
+end
+
+function parseChunk(rawdata)
+	local granularity = 100 -- nanodegrees
+	local latoff, lngoff = 0, 0 -- nanodegrees
+	local dategran = 1000 -- ms
+
+	local strings={}
+
+	local nodes={}
+	local ways={}
+	local relations={}
+
+	local function tohex(data)
+		local str = ""
+		for i = 1, #data do
+			char = string.byte(data, i)
+			str = string.format("%s%02x", str, char)
+		end
+		return str
+	end
+
+
+	local cursor = 1
+	local data_end = #rawdata + 1
+	while cursor < data_end do
+		local key, t
+		key, t, cursor = readKey(rawdata, cursor)
+		if key == 1 then
+			-- stringtable
+			local data_len
+			data_len, cursor = readVarInt(rawdata, cursor)
+			local data_end = cursor + data_len
+			while cursor < data_end do
+				local key, t
+				key, t, cursor = readKey(rawdata, cursor)
+				if key == 1 then
+					-- s
+					local value
+					value, cursor = readString(rawdata, cursor)
+					table.insert(strings, value)
+				else
+					cursor = skip(rawdata, cursor, t)
+				end
+			end
+			if cursor > data_end then
+				abort(1)
+			end
+		elseif key == 2 then
+			-- primitivegroup
+			local data_len
+			data_len, cursor = readVarInt(rawdata, cursor)
+			local data_end = cursor + data_len
+			while cursor < data_end do
+				local key, t
+				key, t, cursor = readKey(rawdata, cursor)
+				if key == 2 then
+					-- dense
+					local nodeid = {}
+
+					local data_len
+					data_len, cursor = readVarInt(rawdata, cursor)
+					local data_end = cursor + data_len
+					while cursor < data_end do
+						local key, t
+						key, t, cursor = readKey(rawdata, cursor)
+						if key == 1 then
+							-- id
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							local last = 0
+							while cursor < data_end do
+								local value
+								value, cursor = readVarZig(rawdata, cursor)
+								value = ffi.cast("uint64_t", value + last)
+								last = value
+
+								nodeid[#nodeid+1] = tostring(value)
+								nodes[tostring(value)] = {}
+							end
+						elseif key == 8 then
+							-- lat
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							local last = 0
+							local i = 1
+							while cursor < data_end do
+								local value
+								value, cursor = readVarZig(rawdata, cursor)
+								value = ffi.cast("uint64_t", value + last)
+								last = value
+
+								nodes[nodeid[i]][1] = tonumber(value)
+								i = i + 1
+							end
+						elseif key == 9 then
+							-- lon
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							local last = 0
+							local i = 1
+							while cursor < data_end do
+								local value
+								value, cursor = readVarZig(rawdata, cursor)
+								value = ffi.cast("uint64_t", value + last)
+								last = value
+
+								nodes[nodeid[i]][2] = tonumber(value)
+								i = i + 1
+							end
+						else
+							cursor = skip(rawdata, cursor, t)
+						end
+					end
+					if cursor > data_end then
+						abort(1)
+					end
+				elseif key == 3 then
+					-- way
+					local way = {
+						refs = {},
+					}
+
+					local data_len
+					data_len, cursor = readVarInt(rawdata, cursor)
+					local data_end = cursor + data_len
+					while cursor < data_end do
+						local key, t
+						key, t, cursor = readKey(rawdata, cursor)
+						if key == 1 then
+							local value
+							value, cursor = readVarInt(rawdata, cursor)
+							way.id = value
+						elseif key == 8 then
+							assert(t == 2)
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							local last = 0
+							while cursor < data_end do
+								local org_cursor = cursor
+								local rawvalue
+								rawvalue, cursor = readVarZig(rawdata, cursor)
+								local value = ffi.cast("uint64_t", rawvalue + last)
+								last = value
+
+								if way.id == 1011415294 then
+									print(way.id)
+									print(tohex(string.sub(rawdata, org_cursor, cursor-1)), cursor-org_cursor, rawvalue, value)
+								end
+								table.insert(way.refs, tostring(value))
+							end
+						else
+							cursor = skip(rawdata, cursor, t)
+						end
+					end
+					if cursor > data_end then
+						abort(1)
+					end
+					ways[tostring(way.id)] = way
+				elseif key == 4 then
+					-- relations
+					local relation = {
+						roles_sid = {},
+						memids = {},
+						types = {},
+						keys = {},
+						values = {},
+					}
+
+					local data_len
+					data_len, cursor = readVarInt(rawdata, cursor)
+					local data_end = cursor + data_len
+					while cursor < data_end do
+						local key, t
+						key, t, cursor = readKey(rawdata, cursor)
+						if key == 1 then
+							-- id
+							local value
+							value, cursor = readVarInt(rawdata, cursor)
+							relation.id = value
+						elseif key == 2 then
+							-- keys
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							while cursor < data_end do
+								local value
+								value, cursor = readVarInt(rawdata, cursor)
+								table.insert(relation.keys, value+1)
+							end
+							if cursor > data_end then
+								abort(1)
+							end
+						elseif key == 3 then
+							-- values
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							while cursor < data_end do
+								local value
+								value, cursor = readVarInt(rawdata, cursor)
+								table.insert(relation.values, value+1)
+							end
+							if cursor > data_end then
+								abort(1)
+							end
+						elseif key == 8 then
+							-- roles_sid
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							while cursor < data_end do
+								local value
+								value, cursor = readVarInt(rawdata, cursor)
+								table.insert(relation.roles_sid, value+1)
+							end
+							if cursor > data_end then
+								abort(1)
+							end
+						elseif key == 9 then
+							-- memids
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							local last = ffi.new("uint64_t", 0)
+							while cursor < data_end do
+								local value
+								value, cursor = readVarZig(rawdata, cursor)
+								value = ffi.cast("uint64_t", value + last)
+								last = value
+
+								table.insert(relation.memids, tostring(value))
+							end
+							if cursor > data_end then
+								abort(1)
+							end
+						elseif key == 10 then
+							-- types
+							local data_len
+							data_len, cursor = readVarInt(rawdata, cursor)
+							local data_end = cursor + data_len
+							while cursor < data_end do
+								local value
+								value, cursor = readVarInt(rawdata, cursor)
+
+								table.insert(relation.types, value)
+							end
+							if cursor > data_end then
+								abort(1)
+							end
+						else
+							cursor = skip(rawdata, cursor, t)
+						end
+					end
+					if cursor > data_end then
+						abort(1)
+					end
+
+					for i, v in pairs(relation.roles_sid) do
+						relation.roles_sid[i] = strings[tonumber(v)]
+					end
+
+					local typeindex, nameindex = nil, nil
+					for i, key in ipairs(relation.keys) do
+						if strings[tonumber(key)] == "type" then
+							typeindex = i
+						elseif strings[tonumber(key)] == "name" then
+							nameindex = i
+						end
+
+						if typeindex ~= nil and nameindex ~= nil then
+							break
+						end
+					end
+					if typeindex ~= nil and nameindex ~= nil then
+						if strings[tonumber(relation.values[typeindex])] == "multipolygon" and strings[tonumber(relation.values[nameindex])] == "Jylland" then
+							relations[relation.id] = relation
+						end
+					end
+				else
+					cursor = skip(rawdata, cursor, t)
+				end
+			end
+			if cursor > data_end then
+				abort(1)
+			end
+		else
+			cursor = skip(rawdata, cursor, t)
+		end
+	end
+	if cursor > data_end then
+		abort(1)
+	end
+
+	return nodes, ways, relations
+end
+
+function rpairs(tbl)
+	local n = #tbl+1
+	return function()
+		n = n - 1
+		if n >= 1 then return n, tbl[n] end
+	end
+end
+
+local json = require("json")
+local rings = require("rings")
+local testlib = require("testlib")
+local poly = nil
+local nextline = nil
+function love.load(args)
+	for i, arg in ipairs(args) do
+		if arg == "--test" then
+			testlib.run()
+		end
+	end
+
+	love.graphics.setPointSize(10)
+
+	if not love.filesystem.exists("poly.nl") then
+		nodes, ways, relations = {}, {}, {}
+
+		local pbf, _ = love.filesystem.read("denmark-latest.osm.pbf")
+		local cursor = 1
+		local header_len, cursor = readInt4(pbf, cursor)
+
+		local index = buildindex(pbf)
+
+		local rawdata = extractblob(pbf, index[1][2], index[1][3])
+
+		-- local required = {}
+		-- local optional = {}
+
+		-- local cursor = 1
+		-- local data_end = #rawdata + 1
+		-- while cursor < data_end do
+		-- 	local key, t
+		-- 	key, t, cursor = readKey(rawdata, cursor)
+		-- 	if key == 4 then
+		-- 		-- required_features
+		-- 		local feature
+		-- 		feature, cursor = readString(rawdata, cursor)
+		-- 		table.insert(required, feature)
+		-- 	elseif key == 5 then
+		-- 		-- optional_features
+		-- 		local feature
+		-- 		feature, cursor = readString(rawdata, cursor)
+		-- 		table.insert(optional, feature)
+		-- 	else
+		-- 		cursor = skip(rawdata, cursor, t)
+		-- 	end
+		-- end
+		-- if cursor > data_end then
+		-- 	abort(1)
+		-- end
+
+		-- table_print(required)
+		-- table_print(optional)
+
+		for i, chunk in ipairs(index) do
+			print(string.format("%d/%d", i, #index))
+			if chunk[1] == "OSMData" then
+				local rawdata = extractblob(pbf, chunk[2], chunk[3])
+				mynodes, myways, myrelations = parseChunk(rawdata)
+
+				for k, node in pairs(mynodes) do
+					nodes[k] = node
+				end
+				for k, way in pairs(myways) do
+					ways[k] = way
+				end
+				for k, v in pairs(myrelations) do
+					relations[k] = v
+				end
+			end
+		end
+
+		-- table_print(nodes)
+		-- table_print(ways)
+		-- table_print(relations)
+
+		local ri, rv = next(relations)
+		print(ri)
+		local relation = relations[ri]
+		for k,v in pairs(relation.memids) do
+			-- print(v, ways[v])
+			-- print(1011415294, ways[1011415294])
+			for k2, v2 in pairs(ways[v].refs) do
+				assert(nodes[v2] ~= nil, "Node not available: " .. v2 .. " of way " .. v)
+			end
+		end
+		local rings = rings.find(nodes, ways, relation)
+		-- table_print(rings)
+
+		function build_poly(ring, nodes, ways)
+			local poly = {
+				v={},
+				e={},
+			}
+			local lastv = nil
+			local skip = 0
+			local first_way = true
+			for k, v in ipairs(ring) do
+				local it
+				if v[2] == -1 then
+					it = rpairs
+				else
+					it = ipairs
+				end
+				assert(it ~= nil)
+
+				local skip_vert = true
+				if first_way then
+					skip_vert = false
+				end
+				for k2, v2 in it(ways[v[1]].refs) do
+					print(k, v[1], v[2], k2, v2, nodes[v2][1]/10000000, nodes[v2][2]/10000000)
+					if not skip_vert then
+						if skip == 0 then
+							local x, y = transform(nodes[v2][2]/10000000, nodes[v2][1]/10000000)
+
+							local newv = #poly.v+1
+							poly.v[newv] = {x, y}
+
+							if lastv ~= nil then
+								poly.e[#poly.e+1] = {lastv, newv}
+							end
+							lastv = newv
+						end
+					else
+						local x, y = transform(nodes[v2][2]/10000000, nodes[v2][1]/10000000)
+						table_print({poly.v[lastv], x, y})
+						assert(poly.v[lastv][1] == x)
+						assert(poly.v[lastv][2] == y)
+					end
+					skip_vert = false
+					-- skip = (skip + 1) % 100
+				end
+				first_way = false
+			end
+			poly.e[#poly.e] = {lastv, 1}
+
+			return poly
+		end
+
+
+		local poly = {
+			v = {
+				{161.40833445764,188.10104040775},
+				{161.28038400715,188.07659031998},
+				{161.27615187693,188.07471718271},
+				{172.50222043322,192.11390980678},
+			},
+			e = {
+				{1, 2},
+				{3, 4},
+			},
+		}
+		for k, v in pairs(poly.v) do
+			poly.v[k][1] = (v[1]-160) * 160
+			poly.v[k][2] = (v[2]-180) * 160
+		end
+		poly = build_poly(rings[1], nodes, ways)
+		pbf = nil
+		ri = nil
+		rv = nil
+		relation = nil
+		rings = nil
+		nodes = nil
+		ways = nil
+		relations = nil
+		index = nil
+
+		file, err = love.filesystem.newFile("poly.nl", "w")
+		file:write("state nodes\n")
+		for k,v in pairs(poly.v) do
+			file:write("x")
+			file:write(tostring(v[1]))
+			file:write(" y")
+			file:write(tostring(v[2]))
+			file:write("\n")
+		end
+		file:write("state edges\n")
+		for k,v in pairs(poly.e) do
+			file:write("p1")
+			file:write(tostring(v[1]))
+			file:write(" p2")
+			file:write(tostring(v[2]))
+			file:write("\n")
+		end
+		file:close()
+	else
+		-- poly = {
+		-- 	v = {
+		-- 		{188.24725326577, 198.56691389086},
+		-- 		{188.24831129832, 198.57033238668},
+		-- 		{188.24901903632, 198.57934479594},
+		-- 		{188.31486011627, 198.57356442124},
+		-- 		{188.30205649258, 198.57377574665},
+		-- 		{188.26689835673, 198.57815142771},
+		-- 		{188.26413174457, 198.57864866444},
+		-- 		{188.25619650041, 198.57838761515},
+		-- 		{188.25425200814, 198.56911415881},
+		-- 	},
+		-- 	e = {
+		-- 		{1, 2},
+		-- 		{2, 3},
+		-- 		{4, 5},
+		-- 		{6, 7},
+		-- 		{8, 9},
+		-- 	},
+		-- }
+		-- for k, v in ipairs(poly.v) do
+		-- 	v[1] = v[1] - 188.2
+		-- 	v[1] = v[1] * 10000
+		-- 	v[2] = v[2] - 198.5
+		-- 	v[2] = v[2] * 10000
+		-- end
+		file, err = love.filesystem.newFile("poly.nl", "r")
+
+		local state = "nodes"
+		poly = {
+			v = {},
+			e = {},
+		}
+		for line in file:lines() do
+			if string.sub(line, 1, 5) == "state" then
+				state = string.sub(line, 7)
+			elseif state == "nodes" then
+				local x, y = string.match(line, "^x(%d+%.%d+) y(%d+%.%d+)")
+				local vert = {
+					tonumber(x),
+					tonumber(y),
+				}
+				table.insert(poly.v, vert)
+			elseif state == "edges" then
+				local p1, p2 = string.match(line, "^p1(%d+) p2(%d+)")
+				local edge = {
+					tonumber(p1),
+					tonumber(p2),
+				}
+				table.insert(poly.e, edge)
+			end
+		end
+		file:close()
+	end
+	-- table_print(poly)
+	-- print(winding(poly))
+
+	local smallpoly = {
+		v = poly.v,
+		e = {},
+	}
+
+	-- print(#poly.e)
+	-- 63868+63874=127742
+	for i=1,#poly.e do
+		smallpoly.e[i] = poly.e[i]
+	end
+
+	if false then
+		smallpoly = {
+			v = {
+				{100, 100},
+				{150, 150},
+				{200, 150},
+				{250, 100},
+				{200, 50},
+				{150, 50},
+			},
+			e = {
+				{1, 2},
+				{2, 3},
+				{3, 4},
+				{4, 5},
+				{5, 6},
+				{6, 1},
+			}
+		}
+	end
+
+	if false then
+		face = {
+			v = {
+				{100, 300},
+				{200, 200},
+				{200, 220},
+				{500, 200},
+				{600, 300},
+
+				{150, 320},
+				{300, 350},
+
+				{200, 100},
+				{150, 400},
+				{550, 400},
+				{700, 250},
+			},
+			t = {
+				{1, 6, 2},
+				{6, 3, 2},
+				{6, 7, 3},
+				{7, 2, 3},
+				{7, 4, 2},
+				{4, 7, 5},
+
+				[100] = {1, 2, 8},
+				[101] = {9, 6, 1},
+				[102] = {9, 7, 6},
+				[103] = {2, 4, 8},
+				[104] = {10, 5, 7},
+				[105] = {4, 5, 11},
+			},
+			e = {},
+			adj = {
+				{{2, 2}, {100, 3}, {101, 1}},
+				{{4, 1}, {1, 1}, {3, 2}},
+				{{4, 2}, {2, 3}, {102, 1}},
+				{{2, 1}, {3, 1}, {5, 2}},
+				{{103, 3}, {4, 3}, {6, 3}},
+				{{104, 1}, {105, 3}, {5, 3}},
+
+				[100] = {nil, nil, nil},
+				[101] = {nil, nil, nil},
+				[102] = {nil, nil, nil},
+				[103] = {nil, nil, nil},
+				[104] = {nil, nil, nil},
+				[105] = {nil, nil, nil},
+			},
+			inv_t = {
+				{1, 1},
+				{1, 3},
+				{2, 2},
+				{5, 2},
+				{6, 3},
+				{1, 2},
+				{3, 2},
+				{100, 3},
+				{101, 1},
+				{104, 1},
+				{105, 3},
+			},
+		}
+		assert(check(face))
+		local res = add_edge(face, 1, 5)
+		table_print(face)
+		assert(res)
+	else
+		local profiler = require("profiler")
+		profiler.start()
+		face, i = triangulate({smallpoly})
+		if type(face) == "number" then
+			print("Triangulation failed, distilling error case")
+			local minex = bisect_triangulate(poly, i)
+			print("DONE, Found minimal example:")
+			local vertnum = 1
+			local vertset = {}
+			io.write(string.format("v = {\n"))
+			for _, edgei in pairs(minex) do
+				local v1i, v2i = poly.e[edgei][1], poly.e[edgei][2]
+				if vertset[v1i] == nil then
+					vertset[v1i] = vertnum
+					vertnum = vertnum + 1
+					io.write(string.format("    {%.11f, %.11f},\n", poly.v[v1i][1], poly.v[v1i][2]))
+				end
+				if vertset[v2i] == nil then
+					vertset[v2i] = vertnum
+					vertnum = vertnum + 1
+					io.write(string.format("    {%.11f, %.11f},\n", poly.v[v2i][1], poly.v[v2i][2]))
+				end
+			end
+			io.write(string.format("},\ne = {\n"))
+			for _, edgei in pairs(minex) do
+				local v1i, v2i = poly.e[edgei][1], poly.e[edgei][2]
+				io.write(string.format("    {%d, %d},\n", vertset[v1i], vertset[v2i]))
+			end
+			io.write(string.format("},\n"))
+			face = {
+				v = {},
+				e = {},
+				t = {},
+			}
+		end
+		-- Code block and/or called functions to profile --
+		profiler.stop()
+		profiler.report("profiler.log")
+	end
+
+	-- local rings = {
+	-- 	{}
+	-- }
+	-- for j = 1, #ways[relation.memids[1]].refs do
+	-- 	table.insert(rings[1], relation.memids[1])
+	-- end
+	-- local unmatched = {}
+	-- for i, wid in ipairs(relation.memids) do
+	-- 	if i == 1 then
+	-- 	else
+	-- 		table.insert(unmatched, wid)
+	-- 	end
+	-- end
+
+	-- while true do
+	-- 	local current = ways[rings[#rings]].refs
+	-- 	local lastnode = current[#current]
+	-- 	local nextway
+	-- 	for i, wid in ipairs(unmatched) do
+	-- 		print("compare", ways[wid].refs[1], lastnode)
+	-- 		if ways[wid].refs[1] == lastnode then
+	-- 			for j = 1, #ways[wid].refs - 1 do
+	-- 				table.insert(current, ways[wid].refs[j])
+	-- 			end
+	-- 			table.remove(unmatched, i)
+	-- 			if ways[wid].refs[#ways[wid].refs] == current[1] then
+	-- 				print("END")
+	-- 			else
+	-- 				table.insert(current, ways[wid].refs[#ways[wid].refs])
+	-- 			end
+	-- 			goto found
+	-- 		end
+	-- 		print("compare", ways[wid].refs[#ways[wid].refs], lastnode)
+	-- 		if ways[wid].refs[#ways[wid].refs] == lastnode then
+	-- 			-- reverse the nodes
+	-- 			for j = #ways[wid].refs, 2, -1 do
+	-- 				table.insert(current, ways[wid].refs[j])
+	-- 			end
+	-- 			table.remove(unmatched, i)
+	-- 			if ways[wid].refs[1] == current[1] then
+	-- 				print("END")
+	-- 			else
+	-- 				table.insert(current, ways[wid].refs[1])
+	-- 			end
+	-- 			goto found
+	-- 		end
+	-- 	end
+	-- 	table_print(rings)
+	-- 	print("Could not find a match for", lastnode)
+	-- 	abort(1)
+
+	-- 	::found::
+	-- 	table_print(rings)
+	-- end
+
+	-- assert(#rings[1] == #relation.memids)
+
+	-- nodes = {
+	-- 	[1] = {0, 0},
+	-- 	[2] = {0, 100},
+	-- 	[3] = {100, 100},
+	-- 	[4] = {100, 0},
+	-- }
+	-- ways = {
+	-- 	[1] = {refs = {1, 2, 3}},
+	-- 	[2] = {refs = {1, 4, 3}},
+	-- 	[3] = {refs = {1, 3}},
+	-- }
+	-- relations = {
+	-- 	[1] = {memids = {1, 2, 3}},
+	-- }
+
+	-- local rings = require("rings")
+	-- local ring = rings.find(nodes, ways, relations[1])
+
+	-- print("Res")
+	-- table_print(ring)
+end
+
+function find_closest_vert(face, p)
+	-- If you had some sort of cool R-tree here you could probably make this
+	-- fast
+	local closest = nil
+	local closest_dist = nil
+	for i, v in ipairs(face.v) do
+		local dx, dy = p[1] - v[1], p[2] - v[2]
+		local dist = vec_len_sq(dx, dy)
+		if closest == nil or dist < closest_dist then
+			closest = i
+			closest_dist = dist
+		end
+	end
+
+	return closest
+end
+
+function find_tri_with_vert(face, needle)
+	if true then
+		local tbl = face.inv_t[needle]
+		return tbl[1], tbl[2]
+	else
+		-- for i, tri in pairs(face.t) do
+		-- 	for i2, v in ipairs(tri) do
+		-- 		if v == needle then
+		-- 			return i, i2
+		-- 		end
+		-- 	end
+		-- end
+	end
+end
+
+function unpack_or_nil(tbl)
+	if tbl == nil then
+		return nil, nil
+	end
+
+	return unpack(tbl)
+end
+
+-- based on
+-- https://ntrs.nasa.gov/api/citations/19770025881/downloads/19770025881.pdf
+-- section 2.4, Yeah it feels pretty cool to implement something based on JPL's
+-- work in 1977.
+function find_containing_tri(face, p, start_tri)
+	local tri, triv = start_tri, 1
+	if start_tri == nil then
+		local vert = find_closest_vert(face, p)
+		tri, triv = find_tri_with_vert(face, vert)
+	end
+
+	local containing_tri = nil
+	while true do
+		if tri == nil then
+			break
+		end
+
+		local found = true
+		for i=1, 3 do
+			local vo = face.t[tri][triv]
+			local vn = face.t[tri][anticlockwise_vert(triv)]
+			local vpx, vpy = vec_minus(face.v[vo][1], face.v[vo][2], p[1], p[2])
+			local vnx, vny = vec_minus(face.v[vo][1], face.v[vo][2], face.v[vn][1], face.v[vn][2])
+
+			local cross = vec_cross(vnx, vny, vpx, vpy)
+			if cross > 0 then
+				found = false
+				break
+			end
+			triv = anticlockwise_vert(triv)
+		end
+
+		if found then
+			containing_tri = tri
+			break
+		end
+
+		tri, triv = unpack_or_nil(opposing_tri(face, tri, clockwise_vert(triv)))
+	end
+
+	if false then
+		function point_inside_tri(p, face, tri)
+			verts = face["v"]
+			v0 = verts[tri[1]]
+			v1 = {verts[tri[2]][1] - v0[1], verts[tri[2]][2] - v0[2]}
+			v2 = {verts[tri[3]][1] - v0[1], verts[tri[3]][2] - v0[2]}
+
+			div = det(v1, v2)
+
+			a = (det(p, v2) - det(v0, v2)) / div
+			b = -(det(p, v1) - det(v0, v1)) / div
+			inside = a > 0 and b > 0 and a + b < 1
+			return inside
+		end
+
+		-- Disabled. Kept for compat testing
+		for i, tri in pairs(face.t) do
+			if point_inside_tri(p, face, tri) then
+				assert(containing_tri == i)
+				return i
+			end
+		end
+	end
+	return containing_tri
 end
 
 function opposing_tri(face, tri, vert)
-	local others = {}
+	-- local others = {}
+	-- local tri_v = vert
 
-	for _, v in pairs(sutri.t[tri]) do
-		if v ~= vert then
-			others[v] = true
-		end
-	end
+	-- if SAFE then
+	-- 	for i, v in pairs(face.t[tri]) do
+	-- 		if v ~= face.t[tri][vert] then
+	-- 			others[v] = true
+	-- 		end
+	-- 	end
+	-- end
 
-	for i, stri in ipairs(face.t) do
-		local unmatched = nil
-		for j, v in ipairs(stri) do
-			if others[v] ~= true then
-				if unmatched ~= nil then
-					unmatched = nil
-					break
-				end
-				unmatched = j
-			end
-		end
-		if unmatched ~= nil and stri[unmatched] ~= vert then
-			return i, unmatched
-		end
-	end
+	assert(vert ~= nil)
+	assert(vert <= 3)
+	assert(vert >= 1)
+	-- if true then
+		return face.adj[tri][vert]
+	-- elseif false then
+	-- 	for i, stri in pairs(face.t) do
+	-- 		local unmatched = nil
+	-- 		for j, v in ipairs(stri) do
+	-- 			if others[v] ~= true then
+	-- 				if unmatched ~= nil then
+	-- 					unmatched = nil
+	-- 					break
+	-- 				end
+	-- 				unmatched = j
+	-- 			end
+	-- 		end
+	-- 		if unmatched ~= nil and stri[unmatched] ~= face.t[tri][vert] then
+	-- 			assert(face.adj[tri][tri_v] == i)
+	-- 			return i, unmatched
+	-- 		end
+	-- 	end
 
-	return nil
+	-- 	assert(face.adj[tri][tri_v] == nil)
+	-- 	return nil
+	-- else
+	-- 	local i, tv = unpack_or_nil(face.adj[tri][tri_v])
+	-- 	if i == nil then
+	-- 		return nil
+	-- 	end
+
+	-- 	if SAFE then
+	-- 		-- table_print({face, tri, vert, others, i})
+	-- 		assert(i ~= tri)
+	-- 		local unmatched = nil
+	-- 		local match = 0
+	-- 		for j, v in ipairs(face.t[i]) do
+	-- 			if others[v] ~= true then
+	-- 				if unmatched ~= nil then
+	-- 					table_print({"Multiple nodes were unmatched", face, i, unmatched, j, others, tv})
+	-- 					assert(false)
+	-- 				end
+	-- 				unmatched = j
+	-- 			else
+	-- 				match = match + 1
+	-- 			end
+	-- 		end
+	-- 		assert(match == 2)
+	-- 		assert(unmatched ~= nil)
+	-- 		assert(face.t[i][unmatched] ~= face.t[tri][vert])
+	-- 		assert(unmatched == tv)
+	-- 	end
+
+	-- 	return {i, tv}
+	-- end
 end
 
 function incircle(a, b, c, d)
@@ -261,6 +1351,11 @@ function split_tri(face, tri1, p)
 	local v0 = tri[1]
 	local v1 = tri[2]
 	local v2 = tri[3]
+
+	local o0 = opposing_tri(face, tri1, 1)
+	local o1 = opposing_tri(face, tri1, 2)
+	local o2 = opposing_tri(face, tri1, 3)
+
 	local v3 = #face.v+1
 	face.v[v3] = p
 	-- Original tri becomes v0 v1 v3
@@ -272,6 +1367,25 @@ function split_tri(face, tri1, p)
 	face.t[tri2i] = tri2
 	local tri3i = #face.t+1
 	face.t[tri3i] = tri3
+
+	if o0 ~= nil and o0[1] ~= nil then
+		face.adj[o0[1]][o0[2]] = {tri2i, 3}
+	end
+	if o1 ~= nil and o1[1] ~= nil then
+		face.adj[o1[1]][o1[2]] = {tri3i, 3}
+	end
+	if o2 ~= nil and o2[1] ~= nil then
+		face.adj[o2[1]][o2[2]] = {tri1, 3}
+	end
+
+	face.adj[tri3i] = {{tri1, 2}, {tri2i, 1}, o1}
+	face.adj[tri2i] = {{tri3i, 2}, {tri1, 1}, o0}
+	face.adj[tri1] = {{tri2i, 2}, {tri3i, 1}, o2}
+
+	face.inv_t[v0] = {tri1, 1}
+	face.inv_t[v1] = {tri1, 2}
+	face.inv_t[v2] = {tri2i, 2}
+	face.inv_t[v3] = {tri1, 3}
 
 	return tri2i, tri3i
 end
@@ -296,8 +1410,11 @@ end
 function vec_neg(x1, y1)
 	return -x1, -y1
 end
+function vec_len_sq(x, y)
+	return math.pow(x, 2) + math.pow(y, 2)
+end
 function vec_len(x, y)
-	return math.sqrt(math.pow(x, 2) + math.pow(y, 2))
+	return math.sqrt(vec_len_sq(x, y))
 end
 function vec_unit(x, y)
 	local len = vec_len(x, y)
@@ -348,65 +1465,92 @@ function circumcenter(p1, p2, p3)
 end
 
 function is_fixed(face, a, b)
-	for i, v in ipairs(face.e) do
-		if v[1] == a and v[2] == b or v[1] == b and v[2] == a then
-			return true
-		end
-	end
-	return false
+	return face.e[string.format("%d.%d", a, b)] ~= nil or face.e[string.format("%d.%d", b, a)] ~= nil
 end
 
+function set_fixed(face, a, b)
+	face.e[string.format("%d.%d", a, b)] = {a, b}
+end
+
+function resolve_with_swaps(sutri, tri1, v3, stack)
+	while #stack ~= 0 do
+		local tri, t_me = unpack(table.remove(stack))
+		local t_opt = opposing_tri(sutri, tri, t_me)
+		if t_opt[1] ~= nil then
+			local t_opi, oppo_vert = unpack(t_opt)
+			local t_op = sutri.t[t_opi]
+			local oppo_clock = clockwise_vert(oppo_vert)
+			local me_clock = clockwise_vert(t_me)
+			local t_op_swap = anticlockwise_vert(oppo_vert)
+			if not is_fixed(sutri, sutri.t[t_opi][oppo_clock], sutri.t[t_opi][t_op_swap])
+				and incircle(sutri.v[t_op[1]], sutri.v[t_op[2]], sutri.v[t_op[3]], sutri.v[v3]) then
+				local t_me_swap = anticlockwise_vert(t_me)
+
+				-- Reassign the adjecency information
+				local t3 = opposing_tri(sutri, tri, me_clock)
+				local t2 = opposing_tri(sutri, t_opi, oppo_clock)
+
+				sutri.adj[tri][t_me][1] = t2[1]
+				sutri.adj[tri][t_me][2] = t2[2]
+				if t2[1] ~= nil then
+					sutri.adj[t2[1]][t2[2]][1] = tri
+					sutri.adj[t2[1]][t2[2]][2] = t_me
+				end
+				sutri.adj[t_opi][oppo_vert][1] = t3[1]
+				sutri.adj[t_opi][oppo_vert][2] = t3[2]
+				if t3[1] ~= nil then
+					sutri.adj[t3[1]][t3[2]][1] = t_opi
+					sutri.adj[t3[1]][t3[2]][2] = oppo_vert
+				end
+				sutri.adj[tri][me_clock][1] = t_opi
+				sutri.adj[tri][me_clock][2] = oppo_clock
+				sutri.adj[t_opi][oppo_clock][1] = tri
+				sutri.adj[t_opi][oppo_clock][2] = me_clock
+
+				sutri.inv_t[sutri.t[tri][t_me_swap]][1] = t_opi
+				sutri.inv_t[sutri.t[tri][t_me_swap]][2] = oppo_clock
+				sutri.inv_t[sutri.t[t_opi][t_op_swap]][1] = tri
+				sutri.inv_t[sutri.t[t_opi][t_op_swap]][2] = me_clock
+
+				-- Flip edge
+				t_op[t_op_swap] = sutri.t[tri][t_me]
+				sutri.t[tri][t_me_swap] = t_op[oppo_vert]
+
+				table.insert(stack, {tri, t_me})
+				table.insert(stack, {t_opi, t_op_swap})
+			end
+		end
+	end
+
+	check(sutri)
+
+	return true
+end
+
+local lasttri = nil
 function add_point(sutri, p)
-	tri1 = find_containing_tri(sutri, p)
+	tri1 = find_containing_tri(sutri, p, lasttri)
+	if tri1 == nil then
+		die()
+	end
+	lasttri = tri1
+
 	-- tri1 is reused
 	tri2, tri3 = split_tri(sutri, tri1, p)
 	-- @HACK find the new vertex id
 	local v3 = sutri.t[tri1][3]
 
-	stack = {tri1, tri2, tri3}
+	local stack = {{tri1, 3}, {tri2, 3}, {tri3, 3}}
+	resolve_with_swaps(sutri, tri1, v3, stack)
 
-	while #stack ~= 0 do
-		local tri = table.remove(stack)
-		local t_opi, oppo_vert = opposing_tri(sutri, tri, v3)
-		if t_opi ~= nil then
-			local t_op = sutri.t[t_opi]
-			if not is_fixed(sutri, sutri.t[tri1][1], sutri.t[tri1][2]) and incircle(sutri.v[t_op[1]], sutri.v[t_op[2]], sutri.v[t_op[3]], p) then
-				local t_op_swap = anticlockwise_vert(oppo_vert)
-				local t_me_swap
-				for i, v in ipairs(sutri.t[tri]) do
-					if v == v3 then
-						t_me_swap = anticlockwise_vert(i)
-					end
-				end
-				
-				check(sutri)
-
-				-- Flip edge
-				t_op[t_op_swap] = v3
-				sutri.t[tri][t_me_swap] = t_op[oppo_vert]
-
-				table.insert(stack, tri)
-				table.insert(stack, t_opi)
-			end
-		end
-	end
 	return v3
 end
 
 function add_edge(face, v1i, v2i)
-	local tri_cursor = nil
-	local tri_vert = nil
-	for i, tri in ipairs(face.t) do
-		for j, vert in ipairs(tri) do
-			if vert == v1i then
-				tri_cursor = i
-				tri_vert = j
-				goto found
-			end
-		end
+	local tri_cursor, tri_vert = find_tri_with_vert(face, v1i)
+	if tri_cursor == nil then
+		return false
 	end
-	fail()
-	::found::
 
 	local v1 = face.v[v1i]
 	local v2 = face.v[v2i]
@@ -423,13 +1567,13 @@ function add_edge(face, v1i, v2i)
 		abx, aby = vec_minus(b[1], b[2], v1[1], v1[2])
 		acx, acy = vec_minus(c[1], c[2], v1[1], v1[2])
 
-		inside = (vec_cross(abx, aby, acx, acy) * vec_cross(abx, aby, av2x, av2y) >= 0 and 
+		inside = (vec_cross(abx, aby, acx, acy) * vec_cross(abx, aby, av2x, av2y) >= 0 and
 			vec_cross(acx, acy, abx, aby) * vec_cross(acx, acy, av2x, av2y) >= 0)
 
 		if not inside then
-			local new_tri, oppo_vert = opposing_tri(face, tri_cursor, tri[clockwise_vert(tri_vert)])
+			local new_tri, oppo_vert = unpack_or_nil(opposing_tri(face, tri_cursor, clockwise_vert(tri_vert)))
 			if new_tri == nil then
-				deadlocwk()
+				deadlock()
 			end
 			if new_tri == start_tri then
 				deadlock()
@@ -442,41 +1586,59 @@ function add_edge(face, v1i, v2i)
 	end
 
 	local upper
+	local upper_adj = {}
 	if face.t[tri_cursor][clockwise_vert(tri_vert)] ~= v2i then
 		upper = {face.t[tri_cursor][clockwise_vert(tri_vert)]}
+		upper_adj[#upper_adj+1] = {opposing_tri(face, tri_cursor, anticlockwise_vert(tri_vert))}
 	else
-		upper = {}
+		set_fixed(face, v1i, v2i)
+
+		if not check(face) then
+			return false
+		end
+		return 9
 	end
 	local lower
+	local lower_adj = {}
 	if face.t[tri_cursor][anticlockwise_vert(tri_vert)] ~= v2i then
 		lower = {face.t[tri_cursor][anticlockwise_vert(tri_vert)]}
+		lower_adj[#lower_adj+1] = {opposing_tri(face, tri_cursor, clockwise_vert(tri_vert))}
 	else
-		lower = {}
+		set_fixed(face, v1i, v2i)
+
+		if not check(face) then
+			return false
+		end
+		return 9
 	end
 
-	vi = v1i
+	local vi = tri_vert
 
 	dead_tris = {}
 
 	while true do
-		for _, v in ipairs(face.t[tri_cursor]) do
+		for i, v in ipairs(face.t[tri_cursor]) do
 			if v == v2i then
+				upper_adj[#upper_adj+1] = {opposing_tri(face, tri_cursor, clockwise_vert(i))}
+				lower_adj[#lower_adj+1] = {opposing_tri(face, tri_cursor, anticlockwise_vert(i))}
 				goto done
 			end
 		end
 
-		local v = face.v[vi]
-		local tseg, vseg = opposing_tri(face, tri_cursor, vi)
+		-- local v = face.v[vi]
+		local tseg, vseg = unpack_or_nil(opposing_tri(face, tri_cursor, vi))
 		local vo = face.v[face.t[tseg][vseg]]
 
 		v1vox, v1voy = vec_minus(vo[1], vo[2], v1[1], v1[2])
 		if face.t[tseg][vseg] == v2i then
 		elseif vec_cross(v1vox, v1voy, av2x, av2y) > 0 then
 			upper[#upper+1] = face.t[tseg][vseg]
-			vi = face.t[tseg][anticlockwise_vert(vseg)]
+			upper_adj[#upper_adj+1] = {opposing_tri(face, tseg, clockwise_vert(vseg))}
+			vi = anticlockwise_vert(vseg)
 		else
 			lower[#lower+1] = face.t[tseg][vseg]
-			vi = face.t[tseg][clockwise_vert(vseg)]
+			lower_adj[#lower_adj+1] = {opposing_tri(face, tseg, anticlockwise_vert(vseg))}
+			vi = clockwise_vert(vseg)
 		end
 
 		dead_tris[#dead_tris+1] = tri_cursor
@@ -485,88 +1647,189 @@ function add_edge(face, v1i, v2i)
 	::done::
 	dead_tris[#dead_tris+1] = tri_cursor
 
-	local offset = 0
-	table.sort(dead_tris)
-	for _, v in ipairs(dead_tris) do
-		table.remove(face.t, v - offset)
-		offset = offset + 1
+	upper_end = #upper
+	table.insert(upper, "Padding value")
+	for i,v in ipairs(lower) do
+		table.insert(upper, v)
 	end
-	
-	rebuild_tris(face, upper, v1i, v2i, false)
-	rebuild_tris(face, lower, v1i, v2i, true)
+	for i,v in ipairs(lower_adj) do
+		table.insert(upper_adj, v)
+	end
 
-	face.e[#face.e+1] = {v1i, v2i}
+	uv = rebuild_tris(face, dead_tris, upper, upper_adj, v1i, v2i, false, 1, upper_end, nil)
+	lv = rebuild_tris(face, dead_tris, upper, upper_adj, v1i, v2i, true, upper_end+2, #upper, nil)
+	-- Set the adjecency of the root triangles
+	-- table_print(uv)
+	if lv ~= nil then
+		face.adj[uv][3] = {lv, 3}
+	end
+	if uv ~= nil then
+		face.adj[lv][3] = {uv, 3}
+	end
 
-	check(face)
+	face.inv_t[v1i] = {uv, 1}
+	face.inv_t[v2i] = {uv, 2}
+
+	for i=3,#upper do
+		if type(upper[i]) ~= "string" and type(upper[i-2]) ~= "string" then
+			-- print(upper[i], upper[i-2])
+			if upper[i] == upper[i-2] then
+				-- print("They are the same")
+				local s1 = upper_adj[i-1]
+				local s2 = upper_adj[i]
+				s1.adj = true
+				s2.adj = true
+
+				-- Adjust the adjecencies
+				face.adj[s1[2][1]][s1[2][2]] = s2[2]
+				face.adj[s2[2][1]][s2[2][2]] = s1[2]
+			end
+		end
+	end
+
+	for _,v in ipairs(upper_adj) do
+		if not v.adj then
+			face.adj[v[1][1]][v[1][2]] = v[2]
+		end
+	end
+
+	::complete::
+	set_fixed(face, v1i, v2i)
+
+	if not check(face) then
+		return false
+	end
 
 	-- return tri_cursor
 	return 9
 end
 
-function rebuild_tris(face, verts, v1, v2, swap)
-	local c = verts[1]
-	if #verts > 1 then
+function rebuild_tris(face, dead_tris, verts, verts_adj, v1, v2, swap, start, end_, link)
+	if end_-start+1 == 0 then
+		return
+	end
 
-		local ci = 1
-		for i, v in ipairs(verts) do
+	local ci = start
+	local c = verts[start]
+
+	local v1_t
+	local v2_t
+
+	local newt = table.remove(dead_tris)
+
+	local v2_link = {newt, 2}
+	local v1_link = {newt, 1}
+	if swap then
+		v2_link[2] = 1
+		v1_link[2] = 2
+	end
+
+	if end_-start+1 > 1 then
+		for i = start,end_ do
+			v = verts[i]
 			if incircle(face.v[v1], face.v[v2], face.v[c], face.v[v]) then
 				ci = i
 				c = v
 			end
 		end
 
-		pe = {}
-		pd = {}
-		for i = 1, ci-1 do
-			pe[#pe+1] = verts[i]
-		end
-		for i = ci+1, #verts do
-			pd[#pd+1] = verts[i]
-		end
-
-		rebuild_tris(face, pe, v1, c, swap)
-		rebuild_tris(face, pd, c, v2, swap)
+		v2_t = {rebuild_tris(face, dead_tris, verts, verts_adj, v1, c, swap, start, ci-1, v2_link), 3}
+		v1_t = {rebuild_tris(face, dead_tris, verts, verts_adj, c, v2, swap,  ci+1, end_, v1_link), 3}
 	end
 
-	if #verts > 0 then
-		local tri
-		if swap then
-			tri = {v2, v1, c}
-		else
-			tri = {v1, v2, c}
-		end
-		face.t[#face.t+1] = tri
+	if ci == end_ then
+		v1_t = verts_adj[ci+1][1]
+		verts_adj[ci+1][2] = v1_link
 	end
+	if ci == start then
+		v2_t = verts_adj[ci][1]
+		verts_adj[ci][2] = v2_link
+	end
+
+	local tri
+	local adj
+	if swap then
+		tri = {v2, v1, c}
+		adj = {v2_t, v1_t, link}
+	else
+		tri = {v1, v2, c}
+		adj = {v1_t, v2_t, link}
+	end
+	face.t[newt] = tri
+	face.adj[newt] = adj
+	face.inv_t[c] = {newt, 3}
+
+	return newt
 end
 
-function trim(face, vout)
-	local inside = false
+local vbefore = {}
+insides = {}
+local offx, offy = 0, 0
+local max_cnt = 0
+zoom = 1
 
-	local tri_cursor
-	local tri_vert
-	for i, tri in ipairs(face.t) do
-		for j, v in ipairs(tri) do
-			if v == vout then
-				tri_vert = j
-				tri_cursor = i
-				goto found
+-- Keep vout 1 and 2 in counterclockwise order
+function trim(face)
+	print("trim", max_cnt)
+	local tri_cursor, tri_vert = find_tri_with_vert(face, 1)
+
+	local visited = {}
+
+	--  This will end up with one value for each tri
+	insides = {
+		[tri_cursor] = false,
+	}
+	local stack = {tri_cursor}
+
+	local tri = nil
+	-- local cnt = 0
+	while true do
+		-- cnt = cnt + 1
+		-- if cnt > max_cnt then
+		-- 	return
+		-- end
+		if tri == nil then
+			tri = table.remove(stack)
+			if tri == nil then
+				break
 			end
 		end
+
+		local start_vert = tri_vert
+
+		local next_tri = nil
+		for i = 1,3 do
+			local tseg, vseg = unpack_or_nil(opposing_tri(face, tri, i))
+
+			if tseg ~= nil and visited[tseg] == nil then
+				visited[tseg] = true
+				local s1 = face.t[tseg][clockwise_vert(vseg)]
+				local s2 = face.t[tseg][anticlockwise_vert(vseg)]
+				insides[tseg] = insides[tri] ~= is_fixed(face, s1, s2)
+
+				if next_tri == nil then
+					next_tri = tseg
+				else
+					table.insert(stack, tseg)
+				end
+			end
+		end
+
+		tri = next_tri
 	end
-	::found::
 
 	local verts = {}
 	local newface = {
 		t = {},
 		v = {},
 	}
-	local visited = {}
 
-	while true do
-		visited[tri_cursor] = inside
-
+	-- Copy over the face
+	for tri, inside in ipairs(insides) do
 		if inside then
-			for i, v in ipairs(face.t[tri_cursor]) do
+			local newt = #newface.t+1
+
+			for i, v in ipairs(face.t[tri]) do
 				if verts[v] == nil then
 					newi = #newface.v+1
 					newface.v[newi] = face.v[v]
@@ -574,87 +1837,177 @@ function trim(face, vout)
 				end
 			end
 
-			newface.t[#newface.t+1] = {verts[face.t[tri_cursor][1]], verts[face.t[tri_cursor][2]], verts[face.t[tri_cursor][3]]}
+			newface.t[newt] = {verts[face.t[tri][1]], verts[face.t[tri][2]], verts[face.t[tri][3]]}
 		end
-
-		local start_vert = tri_vert
-		local tseg, vseg
-		while true do
-			tseg, vseg = opposing_tri(face, tri_cursor, face.t[tri_cursor][tri_vert])
-			if tseg == nil or visited[tseg] ~= nil then
-			else
-				break
-			end
-
-			tri_vert = anticlockwise_vert(tri_vert)
-			if tri_vert == start_vert then
-				goto done
-			end
-		end
-
-		local s1 = face.t[tseg][clockwise_vert(vseg)]
-		local s2 = face.t[tseg][anticlockwise_vert(vseg)]
-		if is_fixed(face, s1, s2) then
-			inside = not inside
-		end
-
-		tri_cursor = tseg
-		tri_vert = anticlockwise_vert(vseg)
 	end
-	::done::
 
 	return newface
 end
 
+local RANGE = {}
+local SOLO = {}
+
+function range_create(start, end_)
+	assert(start <= end_)
+	if start == end_ then
+		return {SOLO, start}
+	else
+		return {RANGE, start, end_}
+	end
+end
+
+function range_split(range)
+	assert(range[1] == RANGE)
+
+	local start, end_ = range[2], range[3]
+	local range_num = (end_ - start) + 1
+	local mid = math.floor(range_num/2) + start
+	return range_create(start, mid-1), range_create(mid, end_)
+end
+
+function range_str(range)
+	if range[1] == RANGE then
+		return string.format("[%d,%d]", range[2], range[3])
+	else
+		return string.format("%d", range[2])
+	end
+end
+
+function range_min(range)
+	return range[2]
+end
+
+function range_max(range)
+	if range[1] == RANGE then
+		return range[3]
+	else
+		return range[2]
+	end
+end
+
+function bisect_triangulate(poly, crashpoint)
+	-- Distill a triangulation error case by removing edges and seeing if it
+	-- still crashes. We try to remove the first half of the edges and check if
+	-- it still fails. If it does, we didn't need those edges. If it stops
+	-- failing we know that we needed at least someof the edges in the range,
+	-- so we subdivide that range again. We start at the lower end since those
+	-- are less likely to affect the crash.
+	local max = crashpoint-1
+	local found_needed = {}
+	local s1, s2 = range_split(range_create(1, max))
+	local stack = {s2, s1}
+	while #stack > 0 do
+		local elem = table.remove(stack)
+		print("Checking without range", range_str(elem))
+
+		-- Build the new test poly
+		local tpoly = {
+			v = poly.v,
+			e = {},
+		}
+
+		for k, v in ipairs(found_needed) do
+				print("Copy in", v)
+				table.insert(tpoly.e, poly.e[v])
+		end
+		for k, v in rpairs(stack) do
+			print("Copy in range", range_str(v))
+			-- Copy over all the unprocessed ranges in the "stack"
+			for j = range_min(v), range_max(v) do
+				table.insert(tpoly.e, poly.e[j])
+			end
+		end
+		-- Also insert the final edge which triggers the abort
+		print("Insert the crashpoint")
+		table.insert(tpoly.e, poly.e[crashpoint])
+
+		local face, _ = triangulate({tpoly})
+		if type(face) == "number" then
+			-- It still failed, so we don't need this
+			print("Failed, discard range")
+		else
+			-- Didn't fail, we need some of these
+			if elem[1] == SOLO then
+				table.insert(found_needed, elem[2])
+			else
+				local s1, s2 = range_split(elem)
+				table.insert(stack, s2)
+				table.insert(stack, s1)
+			end
+		end
+	end
+
+	table.insert(found_needed, crashpoint)
+	return found_needed
+end
+
+function triangulate(polys)
+	local box = bbox(polys[1])
+	local face = superTri(box)
+
+	for polyi, poly in ipairs(polys) do
+		local points = {}
+		-- for i, v in ipairs(poly.v) do
+		-- 	points[i] = add_point(face, v)
+		-- end
+
+		for i, e in ipairs(poly.e) do
+			-- if i < 1374 or (i > 1375 and i < 1415) or (i > 1415 and i < 1418) or (i > 1418 and i < 1423) then
+			-- else
+				if points[e[1]] == nil then
+					points[e[1]] = add_point(face, poly.v[e[1]])
+				end
+				if points[e[2]] == nil then
+					points[e[2]] = add_point(face, poly.v[e[2]])
+				end
+				if not check(face) then
+					error("Incorrect face")
+				end
+				print("Edge", i)
+				if add_edge(face, points[e[1]], points[e[2]]) == false then
+					return polyi, i
+				end
+			-- end
+		end
+	end
+
+	if not check(face) then
+		error("Incorrect face")
+	end
+	-- drawpol(polys[1])
+	face = trim(face)
+	return face, 0
+end
+
 function love.draw()
-	love.graphics.translate(offset, offset)
+	love.graphics.translate(offx, offy)
+	-- love.graphics.scale(zoom, zoom)
 	-- drawpol(outer)
 	-- drawpol(inner)
 	-- print(circumcenter({0,2}, {0,0}, {2,0}))
 	-- love.exit(1)
 
-	 box = bbox(outer)
-	 -- drawpol(box)
-	 sutri = superTri(box)
+	-- drawpol(box)
 
-	 -- p = {100, 100}
-	 -- add_point(sutri, p)
-	 -- love.graphics.points(p[1], p[2])
-	 -- p = {300, 200}
-	 -- add_point(sutri, p)
-	 -- love.graphics.points(p[1], p[2])
-	 -- p = {0, 200}
-	 -- add_point(sutri, p)
-	 -- love.graphics.points(p[1], p[2])
-	 -- p = {200, 100}
-	 -- add_point(sutri, p)
-	 -- love.graphics.points(p[1], p[2])
+	-- p = {100, 100}
+	-- add_point(sutri, p)
+	-- love.graphics.points(p[1], p[2])
+	-- p = {300, 200}
+	-- add_point(sutri, p)
+	-- love.graphics.points(p[1], p[2])
+	-- p = {0, 200}
+	-- add_point(sutri, p)
+	-- love.graphics.points(p[1], p[2])
+	-- p = {200, 100}
+	-- add_point(sutri, p)
+	-- love.graphics.points(p[1], p[2])
 
-	 -- add_edge(sutri, 4, 2)
+	-- add_edge(sutri, 4, 2)
 
-	 -- p = {100, 200}
-	 -- add_point(sutri, p)
-	 -- love.graphics.points(p[1], p[2])
+	-- p = {100, 200}
+	-- add_point(sutri, p)
+	-- love.graphics.points(p[1], p[2])
 
-	 local points = {}
-	 for i, v in ipairs(outer.v) do
-		 points[i] = add_point(sutri, v)
-	 end
-
-	 add_edge(sutri, 4, 5)
-	 for i, e in ipairs(outer.e) do
-		 add_edge(sutri, points[e[1]], points[e[2]])
-	 end
-
-	 local points = {}
-	 for i, v in ipairs(inner.v) do
-		 points[i] = add_point(sutri, v)
-	 end
-
-	 for i, e in ipairs(inner.e) do
-		 add_edge(sutri, points[e[1]], points[e[2]])
-	 end
-	
 	-- sutri = {
 	-- 	v = {
 	-- 		{0, 0},
@@ -666,24 +2019,198 @@ function love.draw()
 	-- 	}
 	-- }
 	--
-	
-	check(sutri)
 
-	local newface = trim(sutri, 1)
-	table_print(newface)
+	-- f, n = love.filesystem.read("denmark.poly")
+	-- it = magiclines(f)
 
-	love.graphics.points(mx, my)
-	drawpol(newface)
+	-- -- Skip 2 first garbage lines
+	-- it()
+	-- it()
+	-- local lastv = nil
+	-- for line in it do
+	-- 	if line == "END" then
+	-- 		break
+	-- 	end
+
+	-- 	xstr, ystr = line:match("^ +(%d+%.%d+E%+%d+) +(%d+%.%d+E%+%d+)$")
+	-- 	x, y = tonumber(xstr), tonumber(ystr)
+	-- 	local newv = #poly.v+1
+	-- 	tx, ty = transform(x, y)
+	-- 	poly.v[newv] = {tx, ty}
+
+	-- 	if lastv ~= nil then
+	-- 		poly.e[#poly.e+1] = {lastv, newv}
+	-- 	end
+
+	-- 	lastv = newv
+	-- end
+	-- poly.e[#poly.e+1] = {lastv, 1}
+
+	-- flippoly(poly)
+	-- -- drawpol(poly)
+
+	-- local newface = triangulate({poly})
+
+	-- love.graphics.points(mx, my)
+	-- drawpol(newface)
+
+	-- for _, mem in ipairs(v.memids) do
+	-- 	for k2 = 2, #ways[mem].refs do
+	-- 		local last = ways[mem].refs[k2-1]
+	-- 		local v2 = ways[mem].refs[k2]
+	-- 		local lastx, lasty = transform(nodes[last][2]/10000000, nodes[last][1]/10000000)
+	-- 		local v2x, v2y = transform(nodes[v2][2]/10000000, nodes[v2][1]/10000000)
+	-- 		print(lastx, lasty, v2x, v2y)
+	-- 		dline({lastx, lasty}, {v2x, v2y})
+	-- 	end
+	-- end
+	drawpol(face)
+	if nextline ~= nil then
+		love.graphics.setColor(255, 0, 255)
+		dline(nextline[1], nextline[2])
+		love.graphics.setColor(255, 255, 255)
+	end
+
+end
+
+function transform(lng, lat)
+	local r = 1
+	local lambda = math.rad(lng)
+	local phi = math.rad(lat)
+	local x = r * lambda
+	local y = r * math.log(math.tan((math.pi/4) + phi * .5))
+	x, y =  x*4096 - 500, y*4096 - 4516
+	return x, y
+	-- return x*100 - 800, y*100-5400
+end
+
+function flippoly(poly)
+	local maxy = 0
+	for k, v in ipairs(poly.v) do
+		maxy = math.max(maxy, v[2])
+	end
+
+	for k, v in ipairs(poly.v) do
+		v[2] = maxy - v[2]
+	end
+end
+
+local step = 1
+function love.keypressed(key, scancode, isrepeat)
+	if scancode == "x" then
+		zoom = zoom + 1
+	elseif scancode == "z" then
+		zoom = zoom - 1
+	elseif scancode == "w" then
+		offy = offy + 10*zoom
+	elseif scancode == "a" then
+		offx = offx + 10*zoom
+	elseif scancode == "s" then
+		offy = offy - 10*zoom
+	elseif scancode == "d" then
+		offx = offx - 10*zoom
+	elseif scancode == "y" then
+		max_cnt = max_cnt + 1
+	elseif scancode == "h" then
+		max_cnt = max_cnt - 1
+	elseif scancode == "t" then
+		trim(face)
+	end
+end
+
+function magiclines(s)
+	if s:sub(-1)~="\n" then s=s.."\n" end
+	return s:gmatch("(.-)\n")
+end
+
+function winding(poly)
+	local sum = 0
+	for k,v in ipairs(poly.e) do
+		local a = poly.v[v[1]]
+		local b = poly.v[v[2]]
+		sum = sum + (b[1] - a[1]) * (b[2] + a[2])
+	end
+
+	return sum
 end
 
 function check(face)
+	if not SAFE then
+		return true
+	end
+
+	if #face.inv_t ~= #face.v then
+		print("Not enough inverse")
+		return false
+	end
+
+	for vi, v in pairs(face.inv_t) do
+		if face.t[v[1]][v[2]] ~= vi then
+			table_print({vi, v, face.t[v[1]]})
+			print("inv_t did not point to correct triangle")
+			return false
+		end
+	end
+
+	for _, e1 in pairs(face.e) do
+		local v1 = face.v[e1[1]]
+		local v2 = face.v[e1[2]]
+		for _, e2 in pairs(face.e) do
+			if e1 ~= e2 then
+				local v3 = face.v[e2[1]]
+				local v4 = face.v[e2[2]]
+
+				local tu = (v1[1] - v3[1]) * (v3[2] - v4[2]) - (v1[2] - v3[2]) * (v3[1] - v4[1])
+				local tl = (v1[1] - v2[1]) * (v3[2] - v4[2]) - (v1[2] - v2[2]) * (v3[1] - v4[1])
+
+				local su = (v1[1] - v3[1]) * (v1[2] - v2[2]) - (v1[2] - v3[2]) * (v1[1] - v2[1])
+				local sl = (v1[1] - v2[1]) * (v3[2] - v4[2]) - (v1[2] - v2[2]) * (v3[1] - v4[1])
+
+				if tu >= tl or tu <= 0 then
+				elseif su >= sl or su <= 0 then
+				else
+					print("Edges collides at", tu/tl, su/sl)
+					return false
+				end
+			end
+		end
+	end
+
+	local inv_adj = {}
+	for i, v in ipairs(face.adj) do
+		for i2, v2 in ipairs(v) do
+			if inv_adj[v2] ~= nil then
+				table_print({"Adjecency value used multiple timed", v2})
+				return false
+			end
+			inv_adj[v2] = {i, i2}
+		end
+	end
+
+	for i, v in ipairs(face.adj) do
+		for i2, v2 in ipairs(v) do
+			if i == v2[1] then
+				print("Triangle is adjecent to itself", i)
+				return false
+			end
+
+			local otri, overt = unpack_or_nil(opposing_tri(face, i, i2))
+			if otri ~= nil then
+				local stri, svert = unpack_or_nil(opposing_tri(face, otri, overt))
+				if stri ~= i or svert ~= i2 then
+					print("Opposing adjecency doesn't match", i, i2, stri, svert)
+					return false
+				end
+			end
+		end
+	end
+
 	for i, tri in ipairs(face.t) do
 		reverse = {}
 		for i, v in ipairs(tri) do
 			if reverse[v] == true then
-				print("Duplicated vertex in tri")
-				table_print(face)
-				kill()
+				print("Duplicated vertex in tri ", i, v)
+				return false
 			end
 			reverse[v] = true
 		end
@@ -695,40 +2222,42 @@ function check(face)
 
 		-- amx, amy = vec_minus(mx, my, a[1], a[2])
 		if vec_cross(abx, aby, acx, acy) > 0 then
-			print("Bad winding on ", i)
-			kill()
+			table_print({"Bad winding on ", i, a, b, c})
+			return false
 		end
 	end
+
+	return true
 end
 
 -- Print anything - including nested tables
 function table_print (tt, indent, done)
-  done = done or {}
-  indent = indent or 0
-  if type(tt) == "table" then
-    for key, value in pairs (tt) do
-      io.write(string.rep (" ", indent)) -- indent it
-      if type (value) == "table" and not done [value] then
-        done [value] = true
-        io.write(string.format("[%s] => table\n", tostring (key)));
-        io.write(string.rep (" ", indent+4)) -- indent it
-        io.write("(\n");
-        table_print (value, indent + 7, done)
-        io.write(string.rep (" ", indent+4)) -- indent it
-        io.write(")\n");
-      else
-        io.write(string.format("[%s] => %s\n",
-            tostring (key), tostring(value)))
-      end
-    end
-  else
-    io.write(tt .. "\n")
-  end
+	done = done or {}
+	indent = indent or 0
+	if type(tt) == "table" then
+		for key, value in pairs (tt) do
+			io.write(string.rep (" ", indent)) -- indent it
+			if type (value) == "table" and not done [value] then
+				done[value] = true
+				io.write(string.format("[%s] => %s\n", tostring(key), tostring(value)));
+				io.write(string.rep (" ", indent+4)) -- indent it
+				io.write("(\n");
+				table_print (value, indent + 7, done)
+				io.write(string.rep (" ", indent+4)) -- indent it
+				io.write(")\n");
+			else
+				io.write(string.format("[%s] => %s\n",
+				tostring (key), tostring(value)))
+			end
+		end
+	else
+		io.write(tt .. "\n")
+	end
 end
 
 mx, my = 0, 0
 
 function love.update(dt)
 	mx, my = love.mouse.getPosition()
-	mx, my = mx - offset, my - offset
+	mx, my = love.graphics.inverseTransformPoint(mx, my)
 end
