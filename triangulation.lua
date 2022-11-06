@@ -123,7 +123,7 @@ local lasttri = nil
 function lib.add_point(sutri, p)
 	tri1 = find_containing_tri(sutri, p, lasttri)
 	if tri1 == nil then
-		die()
+		error("The point is outside the mesh")
 	end
 	lasttri = tri1
 
@@ -139,9 +139,14 @@ function lib.add_point(sutri, p)
 end
 
 function lib.add_edge(face, v1i, v2i)
+	assert(v1i ~= v2i)
+	if is_fixed(face, v1i, v2i) then
+		return
+	end
+
 	local tri_cursor, tri_vert = find_tri_with_vert(face, v1i)
 	if tri_cursor == nil then
-		return false
+		error("Vertex is not part of any triangle")
 	end
 
 	local v1 = face.v[v1i]
@@ -232,7 +237,7 @@ function lib.add_edge(face, v1i, v2i)
 	dead_tris[#dead_tris+1] = tri_cursor
 
 	upper_end = #upper
-	table.insert(upper, "Padding value")
+	table.insert(upper, "-- SEP --")
 	for i,v in ipairs(lower) do
 		table.insert(upper, v)
 	end

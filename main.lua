@@ -2,6 +2,7 @@
 -- and https://github.com/artem-ogre/CDT
 
 local SAFE = false
+local triang = require("triangulation")
 
 outer = {
 	v = {
@@ -55,12 +56,12 @@ function drawTris(verts, tris, labels, edge_labels)
 			pv[#pv+1] = verts[v][1] * zoom
 			pv[#pv+1] = verts[v][2] * zoom
 		end
-		love.graphics.polygon("fill", pv)
+		-- love.graphics.polygon("fill", pv)
 
-		-- dline(verts[tri[1]], verts[tri[2]])
-		-- dline(verts[tri[2]], verts[tri[3]])
-		-- dline(verts[tri[3]], verts[tri[1]])
-		-- love.graphics.print(labels[i], (v1[1]+v2[1]+v3[1])/3*zoom, (v1[2]+v2[2]+v3[2])/3*zoom)
+		dline(verts[tri[1]], verts[tri[2]])
+		dline(verts[tri[2]], verts[tri[3]])
+		dline(verts[tri[3]], verts[tri[1]])
+		love.graphics.print(labels[i], (v1[1]+v2[1]+v3[1])/3*zoom, (v1[2]+v2[2]+v3[2])/3*zoom)
 
 		if incircle(v1, v2, v3, {mx, my}) then
 
@@ -111,6 +112,7 @@ function drawpol(pol)
 
 		if true then
 			local edge_labels = {}
+			-- table_print(pol)
 			-- for i, v in pairs(pol.adj) do
 			-- 	edge_labels[i] = {adj_tostr(v[1]), adj_tostr(v[2]), adj_tostr(v[3])}
 			-- end
@@ -165,7 +167,7 @@ function drawpol(pol)
 		if i == 5 then
 		-- love.graphics.print(tostring(i), vert[1]*zoom-10, vert[2]*zoom-10)
 		end
-		-- love.graphics.print(tostring(i), vert[1]*zoom+10, vert[2]*zoom+10)
+		love.graphics.print(tostring(i), vert[1]*zoom+10, vert[2]*zoom+10)
 		love.graphics.setColor(255, 255, 255)
 	end
 end
@@ -965,6 +967,33 @@ function love.load(args)
 		}
 	end
 
+	if true then
+		local contents, size = love.filesystem.read("test/cdtfile/inputs/cdt.txt")
+		local nextLine = contents:gmatch("([^\n]*)\n?")
+		local nvert, nedge = nextLine():match("(%d*) (%d*)")
+
+		-- read verts
+		local verts = {}
+		for i = 1, nvert do
+			local x, y = nextLine():match("(-?[%d%.]+) +(-?[%d%.]+)")
+			table.insert(verts, {tonumber(x), tonumber(y)})
+		end
+
+		-- read edges
+		local edges = {}
+		for i = 1, nedge do
+			local line = nextLine()
+			print(line)
+			local s, e = line:match("(%d+) +(%d+)")
+			table.insert(edges, {s+1, e+1})
+		end
+
+		smallpoly = {
+			v = verts,
+			e = edges,
+		}
+	end
+
 	if false then
 		face = {
 			v = {
@@ -1006,12 +1035,12 @@ function love.load(args)
 				{{103, 3}, {4, 3}, {6, 3}},
 				{{104, 1}, {105, 3}, {5, 3}},
 
-				[100] = {nil, nil, nil},
-				[101] = {nil, nil, nil},
-				[102] = {nil, nil, nil},
-				[103] = {nil, nil, nil},
-				[104] = {nil, nil, nil},
-				[105] = {nil, nil, nil},
+				[100] = {{103, 2},      nil, {  1, 2}},
+				[101] = {{  1, 3},      nil, {102, 2}},
+				[102] = {{  3, 3}, {101, 3},      nil},
+				[103] = {     nil, {100, 1}, {  5, 1}},
+				[104] = {{  6, 1},      nil,      nil},
+				[105] = {     nil,      nil, {  6, 2}},
 			},
 			inv_t = {
 				{1, 1},
@@ -1028,16 +1057,19 @@ function love.load(args)
 			},
 		}
 		assert(check(face))
-		local res = add_edge(face, 1, 5)
+		local res = triang.add_edge(face, 1, 5)
 		table_print(face)
 		assert(res)
 	else
 		local profiler = require("profiler")
 		profiler.start()
-		face, i = triangulate({smallpoly})
-		if type(face) == "number" then
+		print("TRIANGULATE")
+		local success
+		success, face, i = pcall(triangulate, {smallpoly})
+		if not success then
+			print("Failed with ", face.msg)
 			print("Triangulation failed, distilling error case")
-			local minex = bisect_triangulate(poly, i)
+			local minex = bisect_triangulate(smallpoly, face.edge)
 			print("DONE, Found minimal example:")
 			local vertnum = 1
 			local vertset = {}
@@ -1197,7 +1229,7 @@ end
 -- work in 1977.
 function find_containing_tri(face, p, start_tri)
 	local tri, triv = start_tri, 1
-	if start_tri == nil then
+	if start_tri == nil or face.t[tri] == nil then
 		local vert = find_closest_vert(face, p)
 		tri, triv = find_tri_with_vert(face, vert)
 	end
@@ -1474,6 +1506,58 @@ local function is_fixed(face, a, b)
 	return face.e[string.format("%d.%d", a, b)] ~= nil or face.e[string.format("%d.%d", b, a)] ~= nil
 end
 
+function is_tri(face, t, vt, v1, v2, v3)
+	if face.t[t][vt] == v1 and face.t[t][anticlockwise_vert(vt)] == v2 and face.t[t][clockwise_vert(vt)] == v3 then
+		return true
+	end
+
+	return false
+end
+
+function find_tri(face, v1, v2, v3)
+	local cursor, vcursor = find_tri_with_vert(face, v1)
+	local start_cursor, start_vcursor = cursor, vcursor
+
+	-- Scan anticlockwise
+	while cursor ~= nil do
+		if is_tri(face, cursor, vcursor, v1, v2, v3) then
+			return cursor, vcursor
+		end
+
+		local opp = opposing_tri(face, cursor, anticlockwise_vert(vcursor))
+		if opp == nil then
+			break
+		end
+		cursor = opp[1]
+		vcursor = anticlockwise_vert(opp[2])
+		if cursor == start_cursor then
+			-- If we arrive back, we are done and don't need a clockwise scan
+			return nil
+		end
+	end
+
+	cursor, vcursor = start_cursor, start_vcursor
+
+	-- Scan clockwise
+	while cursor ~= nil do
+		if is_tri(face, cursor, vcursor, v1, v2, v3) then
+			return cursor, vcursor
+		end
+
+		local opp = opposing_tri(face, cursor, clockwise_vert(vcursor))
+		if opp == nil then
+			break
+		end
+		cursor = opp[1]
+		vcursor = clockwise_vert(opp[2])
+		if cursor == start_cursor then
+			error("How did we return when going clockwise without doing it when going anticlockwise?")
+		end
+	end
+
+	return nil
+end
+
 -- Keep vout 1 and 2 in counterclockwise order
 function trim(face)
 	print("trim", max_cnt)
@@ -1524,26 +1608,37 @@ function trim(face)
 		tri = next_tri
 	end
 
-	local verts = {}
 	local newface = {
 		t = {},
 		v = {},
+		adj = {},
 	}
 
 	-- Copy over the face
+	for i = 4,#face.v do
+		newface.v[i-3] = face.v[i]
+	end
+
+	local trimap = {}
+	local trii = 1
 	for tri, inside in ipairs(insides) do
 		if inside then
-			local newt = #newface.t+1
+			trimap[tri] = trii
+			trii = trii + 1
+		end
+	end
 
-			for i, v in ipairs(face.t[tri]) do
-				if verts[v] == nil then
-					newi = #newface.v+1
-					newface.v[newi] = face.v[v]
-					verts[v] = newi
-				end
+	for tri, inside in ipairs(insides) do
+		if inside then
+			local newt = trimap[tri]
+			local t = {}
+			local adj = {}
+			for i = 1,3 do
+				t[i] = face.t[tri][i]-3
+				adj[i] = {trimap[face.adj[tri][i][1]], face.adj[tri][i][2]}
 			end
-
-			newface.t[newt] = {verts[face.t[tri][1]], verts[face.t[tri][2]], verts[face.t[tri][3]]}
+			newface.t[newt] = t
+			newface.adj[newt] = adj
 		end
 	end
 
@@ -1627,8 +1722,9 @@ function bisect_triangulate(poly, crashpoint)
 		print("Insert the crashpoint")
 		table.insert(tpoly.e, poly.e[crashpoint])
 
-		local face, _ = triangulate({tpoly})
-		if type(face) == "number" then
+		local success, face, _ = pcall(triangulate, {tpoly})
+		if not success then
+			print("Failed with ", face.msg)
 			-- It still failed, so we don't need this
 			print("Failed, discard range")
 		else
@@ -1647,7 +1743,6 @@ function bisect_triangulate(poly, crashpoint)
 	return found_needed
 end
 
-local triang = require("triangulation")
 function triangulate(polys)
 	local box = bbox(polys[1])
 	local face = superTri(box)
@@ -1655,7 +1750,7 @@ function triangulate(polys)
 	for polyi, poly in ipairs(polys) do
 		local points = {}
 		-- for i, v in ipairs(poly.v) do
-		-- 	points[i] = add_point(face, v)
+		-- 	points[i] = triang.add_point(face, v)
 		-- end
 
 		for i, e in ipairs(poly.e) do
@@ -1667,20 +1762,16 @@ function triangulate(polys)
 				if points[e[2]] == nil then
 					points[e[2]] = triang.add_point(face, poly.v[e[2]])
 				end
-				if not check(face) then
-					error("Incorrect face")
-				end
-				print("Edge", i)
-				if triang.add_edge(face, points[e[1]], points[e[2]]) == false then
-					return polyi, i
+				print("Edge", i, e[1], e[2], points[e[1]], points[e[2]])
+				local success, msg = pcall(triang.add_edge, face, points[e[1]], points[e[2]])
+				if not success then
+					error({msg=msg, edge=i})
 				end
 			-- end
 		end
 	end
 
-	if not check(face) then
-		error("Incorrect face")
-	end
+	check(face)
 	-- drawpol(polys[1])
 	face = trim(face)
 	return face, 0
@@ -1847,15 +1938,13 @@ function check(face)
 	end
 
 	if #face.inv_t ~= #face.v then
-		print("Not enough inverse")
-		return false
+		error("Not enough inverse")
 	end
 
 	for vi, v in pairs(face.inv_t) do
 		if face.t[v[1]][v[2]] ~= vi then
 			table_print({vi, v, face.t[v[1]]})
-			print("inv_t did not point to correct triangle")
-			return false
+			error("inv_t did not point to correct triangle")
 		end
 	end
 
@@ -1876,8 +1965,7 @@ function check(face)
 				if tu >= tl or tu <= 0 then
 				elseif su >= sl or su <= 0 then
 				else
-					print("Edges collides at", tu/tl, su/sl)
-					return false
+					error("Edges collides at", tu/tl, su/sl)
 				end
 			end
 		end
@@ -1887,8 +1975,8 @@ function check(face)
 	for i, v in ipairs(face.adj) do
 		for i2, v2 in ipairs(v) do
 			if inv_adj[v2] ~= nil then
-				table_print({"Adjecency value used multiple timed", v2})
-				return false
+				table_print({v2})
+				error("Adjecency value used multiple timed")
 			end
 			inv_adj[v2] = {i, i2}
 		end
@@ -1897,16 +1985,14 @@ function check(face)
 	for i, v in ipairs(face.adj) do
 		for i2, v2 in ipairs(v) do
 			if i == v2[1] then
-				print("Triangle is adjecent to itself", i)
-				return false
+				error("Triangle is adjecent to itself", i)
 			end
 
 			local otri, overt = unpack_or_nil(opposing_tri(face, i, i2))
 			if otri ~= nil then
 				local stri, svert = unpack_or_nil(opposing_tri(face, otri, overt))
 				if stri ~= i or svert ~= i2 then
-					print("Opposing adjecency doesn't match", i, i2, stri, svert)
-					return false
+					error("Opposing adjecency doesn't match", i, i2, stri, svert)
 				end
 			end
 		end
@@ -1916,8 +2002,7 @@ function check(face)
 		reverse = {}
 		for i, v in ipairs(tri) do
 			if reverse[v] == true then
-				print("Duplicated vertex in tri ", i, v)
-				return false
+				error("Duplicated vertex in tri ", i, v)
 			end
 			reverse[v] = true
 		end
@@ -1930,7 +2015,7 @@ function check(face)
 		-- amx, amy = vec_minus(mx, my, a[1], a[2])
 		if vec_cross(abx, aby, acx, acy) > 0 then
 			table_print({"Bad winding on ", i, a, b, c})
-			return false
+			error("Bad winding")
 		end
 	end
 
