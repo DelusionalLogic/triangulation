@@ -1,0 +1,6 @@
+-std=gnu11
+-fms-extensions
+-flto
+-D_FORTIFY_SOURCE=2
+-Wall
+-Isrc/

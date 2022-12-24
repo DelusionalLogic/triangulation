@@ -1,5 +1,71 @@
 local lib = {}
 
+local function bbox(poly)
+	verts = poly["v"]
+	min = verts[1]
+	max = min
+	for i, vert in pairs(verts) do
+		min = {
+			math.min(min[1], vert[1]),
+			math.min(min[2], vert[2])
+		}
+		max = {
+			math.max(max[1], vert[1]),
+			math.max(max[2], vert[2])
+		}
+	end
+
+	return {
+		v = {
+			min,
+			{max[1], min[2]},
+			max,
+			{min[1], max[2]},
+		},
+		e = {
+			{1, 2},
+			{2, 3},
+			{3, 4},
+			{4, 1},
+		}
+	}
+end
+
+function lib.superTri(bbox)
+	verts = bbox["v"]
+	center = {
+		(verts[1][1] + verts[3][1]) / 2.0,
+		(verts[1][2] + verts[3][2]) / 2.0,
+	}
+	size = {
+		verts[3][1] - verts[1][1],
+		verts[3][2] - verts[1][2],
+	}
+	inrad = math.sqrt(math.pow(size[1], 2) + math.pow(size[2], 2)) / 2
+	outrad = inrad * 2
+	stride = outrad * math.sqrt(3/2.0)
+	return {
+		v = {
+			{center[1] - stride, center[2] - inrad},
+			{center[1], center[2] + outrad},
+			{center[1] + stride, center[2] - inrad},
+		},
+		t = {
+			{1, 2, 3},
+		},
+		e={
+		},
+		adj={
+			{{nil, nil}, {nil, nil}, {nil, nil}},
+		},
+		inv_t = {
+			{1, 1},
+			{1, 2},
+			{1, 3},
+		}
+	}
+end
+
 local function is_fixed(face, a, b)
 	return face.e[string.format("%d.%d", a, b)] ~= nil or face.e[string.format("%d.%d", b, a)] ~= nil
 end
