@@ -705,60 +705,113 @@ function love.load(args)
 
 	love.graphics.setPointSize(10)
 
-	if not love.filesystem.exists("poly.nl") then
+	if love.filesystem.exists("poly.nl") then
 		nodes, ways, relations = {}, {}, {}
 
-		local pbf, _ = love.filesystem.read("denmark-latest.osm.pbf")
-		local cursor = 1
-		local header_len, cursor = readInt4(pbf, cursor)
+		if false then
+			local pbf, _ = love.filesystem.read("denmark-latest.osm.pbf")
+			local cursor = 1
+			local header_len, cursor = readInt4(pbf, cursor)
 
-		local index = buildindex(pbf)
+			local index = buildindex(pbf)
 
-		local rawdata = extractblob(pbf, index[1][2], index[1][3])
+			local rawdata = extractblob(pbf, index[1][2], index[1][3])
 
-		-- local required = {}
-		-- local optional = {}
+			-- local required = {}
+			-- local optional = {}
 
-		-- local cursor = 1
-		-- local data_end = #rawdata + 1
-		-- while cursor < data_end do
-		-- 	local key, t
-		-- 	key, t, cursor = readKey(rawdata, cursor)
-		-- 	if key == 4 then
-		-- 		-- required_features
-		-- 		local feature
-		-- 		feature, cursor = readString(rawdata, cursor)
-		-- 		table.insert(required, feature)
-		-- 	elseif key == 5 then
-		-- 		-- optional_features
-		-- 		local feature
-		-- 		feature, cursor = readString(rawdata, cursor)
-		-- 		table.insert(optional, feature)
-		-- 	else
-		-- 		cursor = skip(rawdata, cursor, t)
-		-- 	end
-		-- end
-		-- if cursor > data_end then
-		-- 	abort(1)
-		-- end
+			-- local cursor = 1
+			-- local data_end = #rawdata + 1
+			-- while cursor < data_end do
+			-- 	local key, t
+			-- 	key, t, cursor = readKey(rawdata, cursor)
+			-- 	if key == 4 then
+			-- 		-- required_features
+			-- 		local feature
+			-- 		feature, cursor = readString(rawdata, cursor)
+			-- 		table.insert(required, feature)
+			-- 	elseif key == 5 then
+			-- 		-- optional_features
+			-- 		local feature
+			-- 		feature, cursor = readString(rawdata, cursor)
+			-- 		table.insert(optional, feature)
+			-- 	else
+			-- 		cursor = skip(rawdata, cursor, t)
+			-- 	end
+			-- end
+			-- if cursor > data_end then
+			-- 	abort(1)
+			-- end
 
-		-- table_print(required)
-		-- table_print(optional)
+			-- table_print(required)
+			-- table_print(optional)
 
-		for i, chunk in ipairs(index) do
-			print(string.format("%d/%d", i, #index))
-			if chunk[1] == "OSMData" then
-				local rawdata = extractblob(pbf, chunk[2], chunk[3])
-				mynodes, myways, myrelations = parseChunk(rawdata)
+			for i, chunk in ipairs(index) do
+				print(string.format("%d/%d", i, #index))
+				if chunk[1] == "OSMData" then
+					local rawdata = extractblob(pbf, chunk[2], chunk[3])
+					mynodes, myways, myrelations = parseChunk(rawdata)
 
-				for k, node in pairs(mynodes) do
-					nodes[k] = node
+					for k, node in pairs(mynodes) do
+						nodes[k] = node
+					end
+					for k, way in pairs(myways) do
+						ways[k] = way
+					end
+					for k, v in pairs(myrelations) do
+						relations[k] = v
+					end
 				end
-				for k, way in pairs(myways) do
-					ways[k] = way
-				end
-				for k, v in pairs(myrelations) do
-					relations[k] = v
+			end
+		else
+			file, err = love.filesystem.newFile("file.lua", "r")
+			local state = nil
+			local current = nil;
+			for line in file:lines() do
+				if line == "begin nodes" then
+					assert(state == nil)
+					state = "nodes"
+				elseif line == "begin ways" then
+					assert(state == "nodes")
+					if current ~= nil then
+						table.insert(nodes, current)
+						current = nil
+					end
+					state = "ways"
+				elseif line == "begin relations" then
+					assert(state == "ways")
+					if current ~= nil then
+						table.insert(ways, current)
+						current = nil
+					end
+					state = "relations"
+				elseif state == "nodes" then
+					local x, y = string.match(line, "^node pos (%d+%.%d+) (%d+%.%d+)")
+					local vert = {
+						tonumber(x),
+						tonumber(y),
+					}
+					table.insert(nodes, vert)
+				elseif state == "ways" then
+					if line == "way" then
+						if current ~= nil then
+							table.insert(ways, current)
+						end
+						current = {refs={}}
+					else
+						local p1 = string.match(line, "^mem (%d+)")
+						table.insert(current.refs, tonumber(p1))
+					end
+				elseif state == "relations" then
+					if line == "relation" then
+						if current ~= nil then
+							table.insert(relations, current)
+						end
+						current = {memids={}}
+					else
+						local p1 = string.match(line, "^mem (%d+)")
+						table.insert(current.memids, tonumber(p1))
+					end
 				end
 			end
 		end
@@ -766,6 +819,7 @@ function love.load(args)
 		-- table_print(nodes)
 		-- table_print(ways)
 		-- table_print(relations)
+		--
 
 		local ri, rv = next(relations)
 		print(ri)
@@ -967,7 +1021,7 @@ function love.load(args)
 		}
 	end
 
-	if true then
+	if false then
 		local contents, size = love.filesystem.read("test/cdtfile/inputs/cdt.txt")
 		local nextLine = contents:gmatch("([^\n]*)\n?")
 		local nvert, nedge = nextLine():match("(%d*) (%d*)")

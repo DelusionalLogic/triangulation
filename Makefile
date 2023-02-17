@@ -6,7 +6,7 @@ SRCDIR ?= src
 PACKAGES = libdeflate
 LIBS =
 INCS = -Isrc/
-CFG = -std=gnu11 -fms-extensions -flto
+CFG = -std=gnu11 -fms-extensions -flto -lm
 LDFLAGS ?= -Wl,-O3 -Wl,--as-needed -Wl,--export-dynamic -flto
 
 ifeq "$(CFG_DEV)" ""
@@ -22,14 +22,18 @@ print-%  : ; @echo $* = $($*)
 
 SOURCES = $(shell find $(SRCDIR) -name "*.c")
 OBJS_C = $(SOURCES:%.c=$(OBJDIR)/%.o)
+DEPS_C = $(OBJS_C:%.o=%.d)
+
+TEST_SOURCES = $(wildcard test/*.c)
+TEST_OBJS_C = $(TEST_SOURCES:%.c=$(OBJDIR)/%.o)
+TEST_DEPS_C = $(TEST_OBJS_C:%.o=%.d)
 
 LIBS += $(shell pkg-config --libs $(PACKAGES))
 INCS += $(shell pkg-config --cflags $(PACKAGES))
 
-.DEFAULT_GOAL := index
+-include $(DEPS_C) $(TEST_DEPS_C)
 
-src/.clang_complete: Makefile
-	@(for i in $(filter-out -O% -DNDEBUG, $(CFG) $(CPPFLAGS) $(CFLAGS) $(INCS)); do echo "$$i"; done) > $@
+.DEFAULT_GOAL := index
 
 index: $(OBJS_C)
 	$(CC) $(CFG) $(CPPFLAGS) $(LDFLAGS) $(CFLAGS) -o $@ $(OBJS_C) $(LIBS)
@@ -37,3 +41,16 @@ index: $(OBJS_C)
 $(OBJDIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFG) $(CPPFLAGS) $(CFLAGS) $(INCS) -MMD -o $@ -c $<
+
+.PHONY: clean
+clean:
+	@rm -rf $(OBJDIR)
+	@rm -f $(OBJDIR)/test/test
+	@rm -f indx
+
+$(OBJDIR)/test/test: $(TEST_OBJS_C) $(filter-out $(OBJDIR)/$(SRCDIR)/main.o, $(OBJS_C))
+	$(CC) $(CFG) $(CPPFLAGS) $(LDFLAGS) $(CFLAGS) -o $@ $(TEST_OBJS_C) $(filter-out $(OBJDIR)/$(SRCDIR)/main.o, $(OBJS_C)) $(LIBS)
+
+.PHONY: test
+test: $(OBJDIR)/test/test
+	$(OBJDIR)/test/test $(TESTS)
